@@ -13,9 +13,9 @@ using namespace std;
 #define HOGWILD 1
 #define N_THREADS 1
 
-#define N 1000                // Number of vertices
-#define DELTA 3               // Maximum degree of vertices
-#define BETA .2               // Inverse temperature
+#define N (100*100)                 // Number of vertices
+#define DELTA 4                     // Maximum degree of vertices
+#define BETA 1.29                      // Inverse temperature
 #define N_ITERATIONS 10000
 
 #define MAX_EDGES (N*N)
@@ -26,6 +26,37 @@ typedef map<int, vector<int> > Graph;
 // Note that access pattern has form:
 // [thread][batch][state index].
 typedef vector<vector<vector<int> > > AccessPattern;
+
+void Print2DState(vector<int> &state) {
+    if (DELTA != 4) {
+	cout << "Error: For 2D Ising model delta must be 4." << endl;
+	exit(0);
+    }
+    if ((int)sqrt(N) * (int)sqrt(N) != N) {
+	cout << "Error: For 2D Ising model N must be a square." << endl;
+	exit(0);
+    }
+
+    string state_string = "";
+    int length = sqrt(N);
+    for (int i = 0; i < length; i++) {
+	for (int j = 0; j < length; j++) {
+	    if (state[i*length+j] == 1) {
+		state_string += "1";
+	    }
+	    else if (state[i*length+j] == -1) {
+		state_string += "0";
+	    }
+	    else {
+		cout << "Something went wrong..." << endl;
+		exit(0);
+	    }
+	}
+	state_string += "\n";
+    }
+    system("clear");
+    cout << state_string << endl;
+}
 
 void PrintState(vector<int> &state) {
     // For conciseness, print -1 as 0.
@@ -72,6 +103,43 @@ void PrintGraphStatistics(Graph &g) {
     printf("Avg Degree: %lf\n", avg_degree);
 }
 
+Graph Generate2DIsingModelGraph() {
+    if (DELTA != 4) {
+	cout << "Error: For 2D Ising model delta must be 4." << endl;
+	exit(0);
+    }
+    if ((int)sqrt(N) * (int)sqrt(N) != N) {
+	cout << "Error: For 2D Ising model N must be a square." << endl;
+	exit(0);
+    }
+
+    Graph g;
+
+    // Initialize vertices.
+    for (int i = 0; i < N; i++) {
+	g[i] = vector<int>();
+    }
+
+    // Connect the adjacent neighbors of the graph as in a 2D lattice.
+    int length = (int)sqrt(N);
+    for (int i = 0; i < length; i++) {
+	for (int j = 0; j < length; j++) {
+	    int cur_index = i*length+j;
+	    if (i + 1 < length) {
+		int bottom_neighbor = (i+1)*length+j;
+		g[cur_index].push_back(bottom_neighbor);
+		g[bottom_neighbor].push_back(cur_index);
+	    }
+	    if (j + 1 < length) {
+		int right_neighbor = i*length+j+1;
+		g[cur_index].push_back(right_neighbor);
+		g[right_neighbor].push_back(cur_index);
+	    }
+	}
+    }
+    return g;
+}
+
 // Initialize an empty graph g with a
 // synthetic ising graph.
 Graph GenerateRandomIsingModelGraph() {
@@ -108,12 +176,15 @@ Graph GenerateRandomIsingModelGraph() {
 
 vector<int> GenerateIsingState() {
     vector<int> state(N);
+    int n_ones = 0, n_negs = 0;
     for (int i = 0; i < N; i++) {
 	if (rand() % 2 == 0) {
 	    state[i] = 1;
+	    n_ones++;
 	}
 	else {
 	    state[i] = -1;
+	    n_negs++;
 	}
     }
     return state;
@@ -144,7 +215,7 @@ void UpdateState(Graph &g, vector<int> &state, int index) {
 
     double p1 = exp(BETA * (double)product_with_1);
     double p2 = exp(BETA * (double)product_with_neg_1);
-    double prob_1 = p1 / (p1 + p2);
+    double prob_1 = p1 / (p1+p2);
     double selection = ((double)rand() / (RAND_MAX));
     if (selection <= prob_1) {
 	state[index] = 1;
@@ -158,7 +229,8 @@ int main(int argc, char *argv[]) {
     omp_set_num_threads(N_THREADS);
 
     // Generate graph.
-    Graph g = GenerateRandomIsingModelGraph();
+    //Graph g = GenerateRandomIsingModelGraph();
+    Graph g = Generate2DIsingModelGraph();
     PrintGraphStatistics(g);
 
     // Generate variables.
@@ -174,6 +246,7 @@ int main(int argc, char *argv[]) {
     }
 
     for (int iter = 0; iter < N_ITERATIONS; iter++) {
+	Print2DState(state);
 #pragma omp parallel for num_threads(N_THREADS)
 	for (int thread = 0; thread < N_THREADS; thread++) {
 	    for (int batch = 0; batch < n_batches; batch++) {
@@ -183,6 +256,5 @@ int main(int argc, char *argv[]) {
 		}
 	    }
 	}
-	//PrintState(state);
     }
 }
